@@ -10,7 +10,7 @@ export default function DashboardLayout() {
 
     const navItems = [
         { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-        { to: "/students", icon: Users, label: "Data Peserta (DNT)" },
+        { to: "/students", icon: Users, label: "Data Peserta" },
         { to: "/grades", icon: FileSpreadsheet, label: "Rekap Nilai Rapor" },
         { to: "/diploma", icon: GraduationCap, label: "Nilai Ijazah" },
     ];

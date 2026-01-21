@@ -10,7 +10,7 @@ export interface Student {
     name: string;
     gender: 'L' | 'P';
     birth_place: string;
-    birth_date: string;
+    birth_date: string | null;
     father_name: string;
     mother_name: string;
     nik: string;
