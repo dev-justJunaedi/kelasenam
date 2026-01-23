@@ -39,11 +39,38 @@
     - ✅ **Import Excel**: Fixed "0 data" issue (header detection).
     - ✅ **Date Parser**: Fixed `invalid input syntax` by supporting null dates and Excel serial numbers.
 
+- **Feature: Authentication & User Roles**:
+  - Implemented Supabase Auth (Email/Password).
+  - Created `Login` page and protected routes (`PrivateRoute`, `RoleRoute`).
+  - **User Roles**:
+    - `admin`: Full access to all data and features.
+    - `guru`: Restricted access based on `kode_par` (Parallel Class Code).
+  - **Security (RLS)**:
+    - Implemented Row Level Security policies on `students` and `grades`.
+    - Guru can ONLY see students/grades where `student.kode_par` matches their profile's `kode_par`.
+  - **Profile Management**:
+    - Created `profiles` table to store user roles and metadata.
+    - Added trigger to automatically create profile on signup.
+
+- **Feature: Rekap Nilai Rapor (Grades)**:
+  - **Grid Interface**: 
+    - Input knowledge scores for 10 standardized subjects.
+    - Filter by Class Level (5/6) and Semester (1/2).
+    - Status highlighting (Red if score < 75).
+  - **Advanced Inputs**:
+    - **Modal Input**: Focus mode to input all subject scores for a specific student.
+    - **Excel Import**: Import scores for 10 subjects via Excel template (matches by NISN/Name).
+  - **Calculations**:
+    - **Cumulative Average**: Shows real-time average of ALL entered grades across all semesters for a student (2 decimal places).
+    - Sticky columns for Name and Average for better readability.
+
+- **Feature: Dashboard (Home)**:
+  - **Real Data Integration**:
+    - Displays total student count from DB.
+    - Displays global average score from DB.
+    - Personalized greeting based on time of day and user name.
+
 ### 🚧 In Progress / Planned
-- **Feature: Rekap Nilai Rapor**:
-  - Design Interface for Grade 5 (Sem 1 & 2) and Grade 6 (Sem 1).
-  - Implement bulk grade entry grid.
-  - Save to `grades` table.
 - **Feature: Pengolahan Nilai Ijazah**:
   - Implement calculation logic for final scores.
   - Create export/print view for diplomas.
@@ -51,7 +78,13 @@
 ## 📂 Database Schema
 The database schema has been designed and moved to:
 `supabase/migrations/20250102_initial_schema.sql`
+Recent migrations:
+- `20260121_create_profiles_table.sql`: Auth profiles.
+- `add_kode_par_to_profiles`: Added class code to profiles for role restriction.
+- `enable_rls_students_grades`: Activated RLS policies.
 
 ## 📝 Usage Notes
 - Run `npm run dev` to start the development server.
 - Place Supabase credentials in `.env` (check `.env.example`).
+- **Role Setup**: To restrict a Guru, update their `kode_par` in the `profiles` table:
+  `UPDATE profiles SET kode_par = '4' WHERE email = 'guru@example.com';`

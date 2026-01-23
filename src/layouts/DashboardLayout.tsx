@@ -1,12 +1,20 @@
 
-import { LayoutDashboard, Users, FileSpreadsheet, GraduationCap, Menu, X, School } from 'lucide-react';
+import { LayoutDashboard, Users, FileSpreadsheet, GraduationCap, Menu, X, School, LogOut, User as UserIcon } from 'lucide-react';
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function DashboardLayout() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const { user, role, signOut } = useAuth();
+    const navigate = useNavigate();
 
     const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+    const handleSignOut = async () => {
+        await signOut();
+        navigate('/login');
+    };
 
     const navItems = [
         { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -48,10 +56,29 @@ export default function DashboardLayout() {
                 </nav>
 
                 <div className="p-4 border-t border-slate-100">
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                        <p className="text-xs text-slate-500 mb-1">Tahun Pelajaran</p>
-                        <p className="font-semibold text-sm text-slate-700">2025 / 2026</p>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs text-slate-500">Signed in as</p>
+                            {user && (
+                                <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                    {role || 'Guest'}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <UserIcon size={14} className="text-slate-400" />
+                            <p className="font-semibold text-xs text-slate-700 truncate" title={user?.email}>{user?.email}</p>
+                        </div>
                     </div>
+
+                    <button
+                        onClick={handleSignOut}
+                        className="flex items-center gap-2 w-full px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                        <LogOut size={18} />
+                        <span>Sign Out</span>
+                    </button>
                 </div>
             </aside>
 
@@ -77,6 +104,25 @@ export default function DashboardLayout() {
                         <X size={20} />
                     </button>
                 </div>
+
+                <div className="p-4 border-b border-slate-100 bg-slate-50">
+                    <div className="flex items-center justify-between mb-1">
+                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                            }`}>
+                            {role || 'Guest'}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="bg-slate-200 p-2 rounded-full">
+                            <UserIcon size={20} className="text-slate-500" />
+                        </div>
+                        <div className="overflow-hidden">
+                            <p className="text-xs text-slate-500">Signed in as</p>
+                            <p className="font-semibold text-sm text-slate-800 truncate">{user?.email}</p>
+                        </div>
+                    </div>
+                </div>
+
                 <nav className="p-4 space-y-1">
                     {navItems.map((item) => (
                         <NavLink
@@ -94,6 +140,17 @@ export default function DashboardLayout() {
                             <span>{item.label}</span>
                         </NavLink>
                     ))}
+
+                    <button
+                        onClick={() => {
+                            handleSignOut();
+                            setIsSidebarOpen(false);
+                        }}
+                        className="flex items-center gap-3 px-4 py-3 w-full text-left rounded-xl text-red-600 hover:bg-red-50 transition-colors mt-4"
+                    >
+                        <LogOut size={20} />
+                        <span>Sign Out</span>
+                    </button>
                 </nav>
             </aside>
 
