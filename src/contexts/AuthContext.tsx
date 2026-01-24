@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   role: 'admin' | 'guru' | null;
+  className: string | null;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -16,6 +17,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<'admin' | 'guru' | null>(null);
+  const [className, setClassName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,14 +25,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const fetchRole = async (userId: string) => {
       const { data } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, class_name')
         .eq('id', userId)
         .single();
 
       if (data) {
         setRole(data.role as 'admin' | 'guru');
+        setClassName(data.class_name);
       } else {
         setRole(null); // Default or fallback
+        setClassName(null);
       }
     };
 
@@ -56,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetchRole(session.user.id).then(() => setLoading(false));
       } else {
         setRole(null);
+        setClassName(null);
         setLoading(false);
       }
     });
@@ -66,12 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setRole(null);
+    setClassName(null);
   };
 
   const value = {
     user,
     session,
     role,
+    className,
     loading,
     signOut,
   };

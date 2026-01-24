@@ -42,14 +42,17 @@
 - **Feature: Authentication & User Roles**:
   - Implemented Supabase Auth (Email/Password).
   - Created `Login` page and protected routes (`PrivateRoute`, `RoleRoute`).
-  - **User Roles**:
-    - `admin`: Full access to all data and features.
-    - `guru`: Restricted access based on `kode_par` (Parallel Class Code).
+  - **User Roles & Access Control (Refactored)**:
+    - **Logic Change**: Moved from `kode_par` to `class_name` for more readable mapping.
+    - `admin`: Restricted access to Grade 6 classes only (6 A, 6 B, 6 C, 6 D).
+    - `guru`: Restricted access based on assigned `class_name` in profile (e.g. '6 A').
   - **Security (RLS)**:
-    - Implemented Row Level Security policies on `students` and `grades`.
-    - Guru can ONLY see students/grades where `student.kode_par` matches their profile's `kode_par`.
+    - Strict Row Level Security on `students` and `grades`.
+    - ✅ **Fix**: Enabled RLS on `students` table (previously inactive).
+    - Policies ensure users only access data relevant to their role and class assignment.
   - **Profile Management**:
     - Created `profiles` table to store user roles and metadata.
+    - Added `class_name` to profiles for direct mapping.
     - Added trigger to automatically create profile on signup.
 
 - **Feature: Rekap Nilai Rapor (Grades)**:
@@ -80,11 +83,11 @@ The database schema has been designed and moved to:
 `supabase/migrations/20250102_initial_schema.sql`
 Recent migrations:
 - `20260121_create_profiles_table.sql`: Auth profiles.
-- `add_kode_par_to_profiles`: Added class code to profiles for role restriction.
-- `enable_rls_students_grades`: Activated RLS policies.
+- `refactor_roles_to_classname`: Switched from kode_par to class_name.
+- `restrict_admin_view`: Limited admin view to Grade 6 classes.
 
 ## 📝 Usage Notes
 - Run `npm run dev` to start the development server.
 - Place Supabase credentials in `.env` (check `.env.example`).
-- **Role Setup**: To restrict a Guru, update their `kode_par` in the `profiles` table:
-  `UPDATE profiles SET kode_par = '4' WHERE email = 'guru@example.com';`
+- **Role Setup**: To restrict a Guru, update their `class_name` in the `profiles` table:
+  `UPDATE profiles SET class_name = '6 A' WHERE email = 'guru@example.com';`
