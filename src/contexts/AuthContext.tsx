@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  role: 'admin' | 'guru' | null;
+  role: 'admin' | 'guru' | 'guru_kelas' | null;
   className: string | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -16,7 +16,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [role, setRole] = useState<'admin' | 'guru' | null>(null);
+  const [role, setRole] = useState<'admin' | 'guru' | 'guru_kelas' | null>(null);
   const [className, setClassName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (data) {
-        setRole(data.role as 'admin' | 'guru');
+        setRole(data.role as 'admin' | 'guru' | 'guru_kelas');
         setClassName(data.class_name);
       } else {
         setRole(null); // Default or fallback

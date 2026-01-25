@@ -53,7 +53,11 @@
   - **Profile Management**:
     - Created `profiles` table to store user roles and metadata.
     - Added `class_name` to profiles for direct mapping.
+    - Added `class_name` to profiles for direct mapping.
     - Added trigger to automatically create profile on signup.
+  - **🔧 Bug Fixes**:
+    - ✅ **White Screen Issue**: Fixed issue where `guru_kelas` role caused frontend crash loop. Application now correctly handles `guru`, `guru_kelas`, and `admin`.
+    - ✅ **RLS Violation**: Updated database policies to explicitly allow `guru_kelas` role to view and save data.
 
 - **Feature: Rekap Nilai Rapor (Grades)**:
   - **Grid Interface**: 
