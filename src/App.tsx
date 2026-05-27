@@ -6,6 +6,7 @@ import Home from './pages/Home';
 import Students from './pages/Students';
 import Grades from './pages/Grades';
 import Diploma from './pages/Diploma';
+import PreviewSPMB from './pages/PreviewSPMB';
 import Login from './pages/Login';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
               <Route path="students" element={<Students />} />
               <Route path="grades" element={<Grades />} />
               <Route path="diploma" element={<Diploma />} />
+              <Route path="spmb" element={<PreviewSPMB />} />
             </Route>
           </Route>
         </Routes>

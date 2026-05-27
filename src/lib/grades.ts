@@ -74,7 +74,7 @@ export async function fetchGrades(classLevel: number, semester: number) {
             };
         });
 
-        // Calculate Cumulative Average (5-1, 5-2, 6-1, 6-2)
+        // Calculate Cumulative Average (4-1, 4-2, 5-1, 5-2, 6-1, 6-2)
         // We consider ALL knowledge_scores found for this student
         const studentAllGrades = allGrades?.filter(g => g.student_id === student.id && g.knowledge_score !== null) || [];
         const totalScore = studentAllGrades.reduce((sum, g) => sum + (g.knowledge_score || 0), 0);
@@ -133,3 +133,5 @@ export async function saveBulkGrades(grades: Grade[]) {
     if (error) throw error;
     return data;
 }
+
+

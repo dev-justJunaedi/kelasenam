@@ -1,5 +1,5 @@
 
-import { LayoutDashboard, Users, FileSpreadsheet, GraduationCap, Menu, X, School, LogOut, User as UserIcon } from 'lucide-react';
+import { LayoutDashboard, Users, FileSpreadsheet, GraduationCap, Menu, X, School, LogOut, User as UserIcon, Eye } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,7 +20,8 @@ export default function DashboardLayout() {
         { to: "/", icon: LayoutDashboard, label: "Dashboard" },
         { to: "/students", icon: Users, label: "Data Peserta" },
         { to: "/grades", icon: FileSpreadsheet, label: "Rekap Nilai Rapor" },
-        { to: "/diploma", icon: GraduationCap, label: "Nilai Ijazah" },
+        { to: "/diploma", icon: GraduationCap, label: "Nilai TKA" },
+        { to: "/spmb", icon: Eye, label: "Preview SPMB" },
     ];
 
     return (

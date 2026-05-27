@@ -1,5 +1,5 @@
 // Force HMR update
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Save, Filter, RefreshCw, Pencil, Upload } from 'lucide-react';
 import { SUBJECTS, fetchGrades, saveBulkGrades } from '../lib/grades';
 import type { StudentWithGrades, Grade } from '../lib/grades';
@@ -14,32 +14,27 @@ export default function Grades() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [hasChanges, setHasChanges] = useState(false);
+    const [activeCell, setActiveCell] = useState<{row: number, col: number} | null>(null);
+
+    // Refs for Excel-like navigation
+    const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+    const tableRef = useRef<HTMLDivElement>(null);
 
     // Modal States
     const [selectedStudent, setSelectedStudent] = useState<StudentWithGrades | null>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-    useEffect(() => {
-        loadData();
-    }, [selectedLevel, selectedSemester]);
-
-    const loadData = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await fetchGrades(selectedLevel, selectedSemester);
-            setStudents(data);
-            setHasChanges(false);
-        } catch (err: any) {
-            console.error('Error fetching grades:', err);
-            setError('Failed to load grades. Please try again.');
-        } finally {
-            setLoading(false);
+    // Register input ref
+    const registerInput = useCallback((key: string, el: HTMLInputElement | null) => {
+        if (el) {
+            inputRefs.current.set(key, el);
+        } else {
+            inputRefs.current.delete(key);
         }
-    };
+    }, []);
 
-    const handleScoreChange = (studentId: string, subject: string, value: string | number | null) => {
+    const handleScoreChange = useCallback((studentId: string, subject: string, value: string | number | null) => {
         const numValue = value === '' ? null : Number(value);
 
         if (numValue !== null && (numValue < 0 || numValue > 100)) return;
@@ -59,7 +54,176 @@ export default function Grades() {
             };
         }));
         setHasChanges(true);
-    };
+    }, []);
+
+    // Focus a specific cell
+    const focusCell = useCallback((row: number, col: number) => {
+        if (row < 0 || row >= students.length) return;
+        if (col < 0 || col >= SUBJECTS.length) return;
+
+        const key = `${students[row].id}-${SUBJECTS[col]}`;
+        const input = inputRefs.current.get(key);
+        if (input) {
+            input.focus();
+            input.select();
+            setActiveCell({row, col});
+            
+            // Scroll cell into view if needed
+            input.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        }
+    }, [students]);
+
+    // Handle keyboard navigation
+    const handleKeyDown = useCallback((e: React.KeyboardEvent, rowIndex: number, colIndex: number) => {
+        const numRows = students.length;
+        const numCols = SUBJECTS.length;
+
+        switch(e.key) {
+            case 'ArrowUp':
+                e.preventDefault();
+                focusCell(rowIndex - 1, colIndex);
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                focusCell(rowIndex + 1, colIndex);
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                focusCell(rowIndex, colIndex - 1);
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                focusCell(rowIndex, colIndex + 1);
+                break;
+            case 'Tab':
+                e.preventDefault();
+                if (e.shiftKey) {
+                    // Shift+Tab: move backward
+                    if (colIndex > 0) {
+                        focusCell(rowIndex, colIndex - 1);
+                    } else if (rowIndex > 0) {
+                        focusCell(rowIndex - 1, numCols - 1);
+                    }
+                } else {
+                    // Tab: move forward
+                    if (colIndex < numCols - 1) {
+                        focusCell(rowIndex, colIndex + 1);
+                    } else if (rowIndex < numRows - 1) {
+                        focusCell(rowIndex + 1, 0);
+                    }
+                }
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (e.shiftKey) {
+                    // Shift+Enter: move up
+                    focusCell(rowIndex - 1, colIndex);
+                } else {
+                    // Enter: move down
+                    focusCell(rowIndex + 1, colIndex);
+                }
+                break;
+            case 'Home':
+                e.preventDefault();
+                focusCell(rowIndex, 0);
+                break;
+            case 'End':
+                e.preventDefault();
+                focusCell(rowIndex, numCols - 1);
+                break;
+        }
+    }, [students.length, focusCell]);
+
+    // Handle paste from clipboard (Excel-like) - works at table level
+    const handleTablePaste = useCallback((e: React.ClipboardEvent) => {
+        // Only handle paste if we're inside the table and have an active cell
+        if (!activeCell || !tableRef.current?.contains(e.target as Node)) return;
+        
+        e.preventDefault();
+        const text = e.clipboardData.getData('text');
+        
+        if (!text) return;
+        
+        // Parse pasted data (tab-separated columns, newline-separated rows like Excel)
+        // Excel uses \r\n for newlines, but we handle both \r\n and \n
+        const rows = text.split(/\r\n|\n/).filter(row => row.trim() !== '');
+        const data = rows.map(row => row.split('\t'));
+        
+        if (data.length === 0) return;
+        
+        let changesMade = false;
+        const startRow = activeCell.row;
+        const startCol = activeCell.col;
+        
+        // Apply data to cells
+        data.forEach((rowData, rowOffset) => {
+            const targetRow = startRow + rowOffset;
+            if (targetRow >= students.length) return;
+            
+            rowData.forEach((value, colOffset) => {
+                const targetCol = startCol + colOffset;
+                if (targetCol >= SUBJECTS.length) return;
+                
+                const trimmedValue = value.trim();
+                if (trimmedValue === '') return;
+                
+                const numValue = Number(trimmedValue);
+                if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+                    handleScoreChange(students[targetRow].id, SUBJECTS[targetCol], numValue);
+                    changesMade = true;
+                }
+            });
+        });
+        
+        if (changesMade) {
+            setHasChanges(true);
+        }
+    }, [activeCell, students, handleScoreChange]);
+
+    // Handle copy to clipboard
+    const handleTableCopy = useCallback((e: React.ClipboardEvent) => {
+        if (!activeCell || !tableRef.current?.contains(e.target as Node)) return;
+        
+        e.preventDefault();
+        const student = students[activeCell.row];
+        const subject = SUBJECTS[activeCell.col];
+        const score = student.grades[subject]?.knowledge_score;
+        
+        if (score !== null && score !== undefined) {
+            e.clipboardData.setData('text/plain', String(score));
+        }
+    }, [activeCell, students]);
+
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const data = await fetchGrades(selectedLevel, selectedSemester);
+            setStudents(data);
+            setHasChanges(false);
+        } catch (err: any) {
+            console.error('Error fetching grades:', err);
+            setError('Failed to load grades. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedLevel, selectedSemester]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
+
+    // Reset active cell when clicking outside the table
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
+                setActiveCell(null);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const handleBatchUpdate = (studentId: string, updates: Record<string, number | null>) => {
         setStudents(prev => prev.map(student => {
@@ -199,8 +363,14 @@ export default function Grades() {
                     <span className="text-xs font-semibold text-slate-500 px-2 uppercase">Kelas</span>
                     <div className="flex bg-white rounded-md shadow-sm">
                         <button
+                            onClick={() => setSelectedLevel(4)}
+                            className={`px-4 py-1.5 text-sm font-medium rounded-l-md transition-colors ${selectedLevel === 4 ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                        >
+                            Kelas 4
+                        </button>
+                        <button
                             onClick={() => setSelectedLevel(5)}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-l-md transition-colors ${selectedLevel === 5 ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                            className={`px-4 py-1.5 text-sm font-medium transition-colors ${selectedLevel === 5 ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
                         >
                             Kelas 5
                         </button>
@@ -239,8 +409,13 @@ export default function Grades() {
                 </div>
             )}
 
-            {/* Main Grid */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-lg ring-1 ring-black/5 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
+            {/* Excel-like Grid */}
+            <div 
+                ref={tableRef}
+                onPaste={handleTablePaste}
+                onCopy={handleTableCopy}
+                className="bg-white border border-slate-200 rounded-xl shadow-lg ring-1 ring-black/5 overflow-hidden flex flex-col h-[calc(100vh-280px)]"
+            >
                 {loading ? (
                     <div className="flex-1 flex items-center justify-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -266,13 +441,14 @@ export default function Grades() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {students.map((student) => {
-                                    // Average is now pre-calculated in fetchGrades to include ALL semesters (5-1, 5-2, 6-1, 6-2)
+                                {students.map((student, rowIndex) => {
+                                    // Average is now pre-calculated in fetchGrades to include ALL semesters (4-1, 4-2, 5-1, 5-2, 6-1, 6-2)
                                     const average = student.cumulative_average;
+                                    const isRowActive = activeCell?.row === rowIndex;
 
                                     return (
-                                        <tr key={student.id} className="hover:bg-slate-50/50 transition-colors group/row">
-                                            <td className="p-3 border-r border-slate-200 sticky left-0 bg-white z-10 font-medium text-slate-700 group-hover/row:bg-slate-50">
+                                        <tr key={student.id} className={`hover:bg-slate-50/50 transition-colors group/row ${isRowActive ? 'bg-indigo-50/30' : ''}`}>
+                                            <td className={`p-3 border-r border-slate-200 sticky left-0 z-10 font-medium text-slate-700 group-hover/row:bg-slate-50 transition-colors ${isRowActive ? 'bg-indigo-50/50' : 'bg-white'}`}>
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex flex-col">
                                                         <span>{student.name}</span>
@@ -287,28 +463,41 @@ export default function Grades() {
                                                     </button>
                                                 </div>
                                             </td>
-                                            {SUBJECTS.map((subject) => {
+                                            {SUBJECTS.map((subject, colIndex) => {
                                                 const grade = student.grades[subject];
                                                 const score = grade?.knowledge_score;
+                                                const cellKey = `${student.id}-${subject}`;
+                                                const isActive = activeCell?.row === rowIndex && activeCell?.col === colIndex;
 
                                                 return (
-                                                    <td key={`${student.id}-${subject}`} className="p-1 border-r border-slate-200 text-center relative group">
+                                                    <td key={cellKey} className={`p-0 border-r border-slate-200 text-center relative transition-colors ${isActive ? 'bg-indigo-50' : ''} ${isRowActive && !isActive ? 'bg-indigo-50/20' : ''}`}>
                                                         <input
-                                                            type="number"
-                                                            min="0"
-                                                            max="100"
+                                                            ref={(el) => registerInput(cellKey, el)}
+                                                            type="text"
+                                                            inputMode="numeric"
                                                             value={score ?? ''}
-                                                            onChange={(e) => handleScoreChange(student.id, subject, e.target.value)}
-                                                            className={`w-full h-full p-2 text-center bg-transparent focus:bg-indigo-50 focus:ring-2 focus:ring-inset focus:ring-indigo-500 outline-none transition-all font-mono
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                if (val === '' || /^\d*$/.test(val)) {
+                                                                    const num = val === '' ? null : Number(val);
+                                                                    if (num === null || (num >= 0 && num <= 100)) {
+                                                                        handleScoreChange(student.id, subject, num);
+                                                                    }
+                                                                }
+                                                            }}
+                                                            onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
+                                                            onFocus={() => setActiveCell({row: rowIndex, col: colIndex})}
+                                                            className={`w-full h-full p-2 text-center bg-transparent focus:bg-indigo-50 focus:ring-2 focus:ring-inset focus:ring-indigo-500 outline-none transition-all font-mono cursor-cell
                                                                 ${score === null ? 'placeholder-slate-200' : 'font-medium text-slate-900'}
                                                                 ${score !== null && (score < 75) ? 'text-red-900 bg-red-50' : ''}
+                                                                ${isActive ? 'ring-2 ring-inset ring-indigo-500 bg-indigo-50' : ''}
                                                             `}
                                                             placeholder="-"
                                                         />
                                                     </td>
                                                 );
                                             })}
-                                            <td className="p-3 text-center font-bold bg-slate-50 sticky right-0 z-10 shadow-[-4px_0_4px_-2px_rgba(0,0,0,0.05)] border-l border-slate-200">
+                                            <td className={`p-3 text-center font-bold sticky right-0 z-10 shadow-[-4px_0_4px_-2px_rgba(0,0,0,0.05)] border-l border-slate-200 transition-colors ${isRowActive ? 'bg-indigo-50/50' : 'bg-slate-50'}`}>
                                                 {average !== null ? (
                                                     <span className={average < 75 ? 'text-red-600' : 'text-slate-700'}>
                                                         {average.toFixed(2)}
