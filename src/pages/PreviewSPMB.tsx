@@ -250,7 +250,7 @@ export default function PreviewSPMB() {
                                     <th rowSpan={2} className="font-bold p-4 border-b border-r border-slate-200 min-w-[200px] sticky left-0 bg-slate-50 z-30">
                                         Nama Siswa
                                     </th>
-                                    <th colSpan={5} className="font-bold p-3 border-b border-r border-slate-200 text-center bg-indigo-50 text-indigo-800">
+                                    <th colSpan={6} className="font-bold p-3 border-b border-r border-slate-200 text-center bg-indigo-50 text-indigo-800">
                                         Nilai Rapor (NR)
                                     </th>
                                     <th colSpan={2} className="font-bold p-3 border-b border-r border-slate-200 text-center bg-amber-50 text-amber-800">
@@ -394,7 +394,7 @@ export default function PreviewSPMB() {
                                 
                                 {students.length === 0 && (
                                     <tr>
-                                        <td colSpan={13} className="p-8 text-center text-slate-500">
+                                        <td colSpan={12} className="p-8 text-center text-slate-500">
                                             Tidak ada data siswa ditemukan.
                                         </td>
                                     </tr>
