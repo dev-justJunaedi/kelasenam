@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Save, RefreshCw, BookOpen, Calculator } from 'lucide-react';
-import { fetchTKAData, saveBulkTKAScores, TKA_SUBJECTS } from '../lib/tka';
+import { fetchTKAData, saveBulkTKAScores } from '../lib/tka';
 import type { StudentWithTKA, TKAScore } from '../lib/tka';
+
+const TKA_FIELDS: ('bahasa_indonesia' | 'matematika')[] = ['bahasa_indonesia', 'matematika'];
 
 export default function TKA() {
     const [students, setStudents] = useState<StudentWithTKA[]>([]);
@@ -9,6 +11,10 @@ export default function TKA() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [hasChanges, setHasChanges] = useState(false);
+    const [activeCell, setActiveCell] = useState<{row: number, col: number} | null>(null);
+
+    const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+    const tableRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         loadData();
@@ -29,7 +35,142 @@ export default function TKA() {
         }
     }, []);
 
-    const handleScoreChange = (studentId: string, field: 'bahasa_indonesia' | 'matematika', value: string) => {
+    const registerInput = useCallback((key: string, el: HTMLInputElement | null) => {
+        if (el) {
+            inputRefs.current.set(key, el);
+        } else {
+            inputRefs.current.delete(key);
+        }
+    }, []);
+
+    const focusCell = useCallback((row: number, col: number) => {
+        if (row < 0 || row >= students.length) return;
+        if (col < 0 || col >= TKA_FIELDS.length) return;
+
+        const key = `${students[row].id}-${TKA_FIELDS[col]}`;
+        const input = inputRefs.current.get(key);
+        if (input) {
+            input.focus();
+            input.select();
+            setActiveCell({row, col});
+            input.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        }
+    }, [students]);
+
+    const handleKeyDown = useCallback((e: React.KeyboardEvent, rowIndex: number, colIndex: number) => {
+        const numRows = students.length;
+        const numCols = TKA_FIELDS.length;
+
+        switch(e.key) {
+            case 'ArrowUp':
+                e.preventDefault();
+                focusCell(rowIndex - 1, colIndex);
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                focusCell(rowIndex + 1, colIndex);
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                focusCell(rowIndex, colIndex - 1);
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                focusCell(rowIndex, colIndex + 1);
+                break;
+            case 'Tab':
+                e.preventDefault();
+                if (e.shiftKey) {
+                    if (colIndex > 0) {
+                        focusCell(rowIndex, colIndex - 1);
+                    } else if (rowIndex > 0) {
+                        focusCell(rowIndex - 1, numCols - 1);
+                    }
+                } else {
+                    if (colIndex < numCols - 1) {
+                        focusCell(rowIndex, colIndex + 1);
+                    } else if (rowIndex < numRows - 1) {
+                        focusCell(rowIndex + 1, 0);
+                    }
+                }
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (e.shiftKey) {
+                    focusCell(rowIndex - 1, colIndex);
+                } else {
+                    focusCell(rowIndex + 1, colIndex);
+                }
+                break;
+        }
+    }, [students.length, focusCell]);
+
+    const handleTablePaste = useCallback((e: React.ClipboardEvent) => {
+        if (!activeCell || !tableRef.current?.contains(e.target as Node)) return;
+        
+        e.preventDefault();
+        const text = e.clipboardData.getData('text');
+        
+        if (!text) return;
+        
+        const rows = text.split(/\r\n|\n/).filter(row => row.trim() !== '');
+        const data = rows.map(row => row.split('\t'));
+        
+        if (data.length === 0) return;
+        
+        let changesMade = false;
+        const startRow = activeCell.row;
+        const startCol = activeCell.col;
+        
+        data.forEach((rowData, rowOffset) => {
+            const targetRow = startRow + rowOffset;
+            if (targetRow >= students.length) return;
+            
+            rowData.forEach((value, colOffset) => {
+                const targetCol = startCol + colOffset;
+                if (targetCol >= TKA_FIELDS.length) return;
+                
+                const trimmedValue = value.trim();
+                if (trimmedValue === '') return;
+                
+                const numValue = Number(trimmedValue);
+                if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+                    handleScoreChange(students[targetRow].id, TKA_FIELDS[targetCol], numValue);
+                    changesMade = true;
+                }
+            });
+        });
+        
+        if (changesMade) {
+            setHasChanges(true);
+        }
+    }, [activeCell, students]);
+
+    const handleTableCopy = useCallback((e: React.ClipboardEvent) => {
+        if (!activeCell || !tableRef.current?.contains(e.target as Node)) return;
+        
+        e.preventDefault();
+        const student = students[activeCell.row];
+        const field = TKA_FIELDS[activeCell.col];
+        const score = student.tka?.[field];
+        
+        if (score !== null && score !== undefined) {
+            e.clipboardData.setData('text/plain', String(score));
+        }
+    }, [activeCell, students]);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
+                setActiveCell(null);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleScoreChange = (studentId: string, field: 'bahasa_indonesia' | 'matematika', value: string | number | null) => {
         const numValue = value === '' ? null : Number(value);
         
         if (numValue !== null && (numValue < 0 || numValue > 100)) return;
@@ -87,9 +228,13 @@ export default function TKA() {
         return 'text-red-600';
     };
 
+    const subjectLabels = {
+        bahasa_indonesia: 'Bahasa Indonesia',
+        matematika: 'Matematika'
+    };
+
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-800">Input Nilai TKA</h1>
@@ -118,7 +263,6 @@ export default function TKA() {
                 </div>
             )}
 
-            {/* Statistics Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-2 text-slate-500 mb-1">
@@ -156,8 +300,12 @@ export default function TKA() {
                 </div>
             </div>
 
-            {/* Main Table */}
-            <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col">
+            <div 
+                ref={tableRef}
+                onPaste={handleTablePaste}
+                onCopy={handleTableCopy}
+                className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col"
+            >
                 {loading ? (
                     <div className="flex-1 flex items-center justify-center p-12">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -170,9 +318,9 @@ export default function TKA() {
                                     <th className="font-bold p-4 border-b border-r border-slate-200 min-w-[250px] sticky left-0 bg-slate-50 z-30">
                                         Nama Siswa
                                     </th>
-                                    {TKA_SUBJECTS.map((subject) => (
-                                        <th key={subject.key} className="font-bold border-b border-r border-slate-200 text-center min-w-[150px] px-2 py-3">
-                                            {subject.label}
+                                    {TKA_FIELDS.map((field) => (
+                                        <th key={field} className="font-bold border-b border-r border-slate-200 text-center min-w-[150px] px-2 py-3">
+                                            {subjectLabels[field]}
                                         </th>
                                     ))}
                                     <th className="font-bold p-4 border-b border-slate-200 text-center min-w-[100px] bg-slate-100 z-30 sticky right-0">
@@ -181,43 +329,54 @@ export default function TKA() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {students.map((student) => {
+                                {students.map((student, rowIndex) => {
                                     const tka = student.tka;
+                                    const isRowActive = activeCell?.row === rowIndex;
                                     
                                     return (
-                                        <tr key={student.id} className="hover:bg-slate-50/50 transition-colors">
-                                            <td className="p-3 border-r border-slate-200 sticky left-0 bg-white z-10 font-medium text-slate-700">
+                                        <tr key={student.id} className={`hover:bg-slate-50/50 transition-colors ${isRowActive ? 'bg-indigo-50/30' : ''}`}>
+                                            <td className={`p-3 border-r border-slate-200 sticky left-0 z-10 font-medium text-slate-700 transition-colors ${isRowActive ? 'bg-indigo-50/50' : 'bg-white'}`}>
                                                 <div className="flex flex-col">
                                                     <span>{student.name}</span>
                                                     <span className="text-xs text-slate-400 font-normal">{student.nisn || '-'}</span>
                                                 </div>
                                             </td>
                                             
-                                            <td className="p-1 border-r border-slate-200">
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    max="100"
-                                                    value={tka?.bahasa_indonesia ?? ''}
-                                                    onChange={(e) => handleScoreChange(student.id, 'bahasa_indonesia', e.target.value)}
-                                                    className="w-full p-3 text-center bg-transparent focus:bg-indigo-50 focus:ring-2 focus:ring-inset focus:ring-indigo-500 outline-none transition-all font-mono font-medium"
-                                                    placeholder="-"
-                                                />
-                                            </td>
+                                            {TKA_FIELDS.map((field, colIndex) => {
+                                                const score = tka?.[field] ?? null;
+                                                const cellKey = `${student.id}-${field}`;
+                                                const isActive = activeCell?.row === rowIndex && activeCell?.col === colIndex;
+
+                                                return (
+                                                    <td key={cellKey} className={`p-0 border-r border-slate-200 text-center relative transition-colors ${isActive ? 'bg-indigo-50' : ''} ${isRowActive && !isActive ? 'bg-indigo-50/20' : ''}`}>
+                                                        <input
+                                                            ref={(el) => registerInput(cellKey, el)}
+                                                            type="text"
+                                                            inputMode="numeric"
+                                                            value={score ?? ''}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                if (val === '' || /^\d*$/.test(val)) {
+                                                                    const num = val === '' ? null : Number(val);
+                                                                    if (num === null || (num >= 0 && num <= 100)) {
+                                                                        handleScoreChange(student.id, field, num);
+                                                                    }
+                                                                }
+                                                            }}
+                                                            onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
+                                                            onFocus={() => setActiveCell({row: rowIndex, col: colIndex})}
+                                                            className={`w-full h-full p-3 text-center bg-transparent focus:bg-indigo-50 focus:ring-2 focus:ring-inset focus:ring-indigo-500 outline-none transition-all font-mono cursor-cell
+                                                                ${score === null ? 'placeholder-slate-200' : 'font-medium text-slate-900'}
+                                                                ${score !== null && (score < 75) ? 'text-red-900 bg-red-50' : ''}
+                                                                ${isActive ? 'ring-2 ring-inset ring-indigo-500 bg-indigo-50' : ''}
+                                                            `}
+                                                            placeholder="-"
+                                                        />
+                                                    </td>
+                                                );
+                                            })}
                                             
-                                            <td className="p-1 border-r border-slate-200">
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    max="100"
-                                                    value={tka?.matematika ?? ''}
-                                                    onChange={(e) => handleScoreChange(student.id, 'matematika', e.target.value)}
-                                                    className="w-full p-3 text-center bg-transparent focus:bg-indigo-50 focus:ring-2 focus:ring-inset focus:ring-indigo-500 outline-none transition-all font-mono font-medium"
-                                                    placeholder="-"
-                                                />
-                                            </td>
-                                            
-                                            <td className="p-3 text-center font-bold bg-slate-50 sticky right-0 z-10 border-l border-slate-200">
+                                            <td className={`p-3 text-center font-bold sticky right-0 z-10 border-l border-slate-200 transition-colors ${isRowActive ? 'bg-indigo-50/50' : 'bg-slate-50'}`}>
                                                 {tka?.average !== null && tka?.average !== undefined ? (
                                                     <span className={`text-lg ${getScoreColor(tka.average)}`}>
                                                         {tka.average.toFixed(2)}
