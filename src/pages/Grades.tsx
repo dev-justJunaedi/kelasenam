@@ -134,66 +134,6 @@ export default function Grades() {
         }
     }, [students.length, focusCell]);
 
-    // Handle paste from clipboard (Excel-like) - works at table level
-    const handleTablePaste = useCallback((e: React.ClipboardEvent) => {
-        // Only handle paste if we're inside the table and have an active cell
-        if (!activeCell || !tableRef.current?.contains(e.target as Node)) return;
-        
-        e.preventDefault();
-        const text = e.clipboardData.getData('text');
-        
-        if (!text) return;
-        
-        // Parse pasted data (tab-separated columns, newline-separated rows like Excel)
-        // Excel uses \r\n for newlines, but we handle both \r\n and \n
-        const rows = text.split(/\r\n|\n/).filter(row => row.trim() !== '');
-        const data = rows.map(row => row.split('\t'));
-        
-        if (data.length === 0) return;
-        
-        let changesMade = false;
-        const startRow = activeCell.row;
-        const startCol = activeCell.col;
-        
-        // Apply data to cells
-        data.forEach((rowData, rowOffset) => {
-            const targetRow = startRow + rowOffset;
-            if (targetRow >= students.length) return;
-            
-            rowData.forEach((value, colOffset) => {
-                const targetCol = startCol + colOffset;
-                if (targetCol >= SUBJECTS.length) return;
-                
-                const trimmedValue = value.trim();
-                if (trimmedValue === '') return;
-                
-                const numValue = Number(trimmedValue);
-                if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
-                    handleScoreChange(students[targetRow].id, SUBJECTS[targetCol], numValue);
-                    changesMade = true;
-                }
-            });
-        });
-        
-        if (changesMade) {
-            setHasChanges(true);
-        }
-    }, [activeCell, students, handleScoreChange]);
-
-    // Handle copy to clipboard
-    const handleTableCopy = useCallback((e: React.ClipboardEvent) => {
-        if (!activeCell || !tableRef.current?.contains(e.target as Node)) return;
-        
-        e.preventDefault();
-        const student = students[activeCell.row];
-        const subject = SUBJECTS[activeCell.col];
-        const score = student.grades[subject]?.knowledge_score;
-        
-        if (score !== null && score !== undefined) {
-            e.clipboardData.setData('text/plain', String(score));
-        }
-    }, [activeCell, students]);
-
     const loadData = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -213,17 +153,89 @@ export default function Grades() {
         loadData();
     }, [loadData]);
 
-    // Reset active cell when clicking outside the table
+    // Global paste handler for Excel-like multi-cell paste
     useEffect(() => {
+        const handleGlobalPaste = (e: ClipboardEvent) => {
+            const target = e.target as HTMLElement;
+            
+            // Check if we're inside our table
+            if (!tableRef.current?.contains(target)) return;
+            
+            // Find which input is focused
+            if (target.tagName === 'INPUT' && target.closest('td')) {
+                const td = target.closest('td');
+                const tr = target.closest('tr');
+                
+                if (td && tr) {
+                    const rowIndex = Array.from(tr.parentElement?.children || []).indexOf(tr);
+                    // Find the column index by looking at all td children
+                    const allTds = Array.from(tr.querySelectorAll('td')) as HTMLTableCellElement[];
+                    const colIndex = allTds.indexOf(td) - 1; // -1 for name column
+                    
+                    if (rowIndex >= 0 && colIndex >= 0 && colIndex < SUBJECTS.length) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const text = e.clipboardData?.getData('text') || '';
+                        
+                        if (!text) return;
+                        
+                        // Parse data - handle various Excel formats
+                        const rawRows = text.split(/\r\n|\n|\r/);
+                        const rows = rawRows.filter(row => row.trim() !== '');
+                        
+                        // Try different delimiters
+                        let data = rows.map(row => row.split('\t'));
+                        if (data.length > 0 && data[0].length === 1) {
+                            data = rows.map(row => row.split(/\s{2,}/));
+                        }
+                        
+                        let changesMade = false;
+                        
+                        data.forEach((rowData, rowOffset) => {
+                            const targetRow = rowIndex + rowOffset;
+                            if (targetRow >= students.length) return;
+                            
+                            rowData.forEach((value, colOffset) => {
+                                const targetCol = colIndex + colOffset;
+                                if (targetCol >= SUBJECTS.length) return;
+                                
+                                const trimmedValue = value.trim();
+                                if (trimmedValue === '') return;
+                                
+                                const normalizedValue = trimmedValue.replace(',', '.');
+                                const numValue = Number(normalizedValue);
+                                
+                                if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+                                    handleScoreChange(students[targetRow].id, SUBJECTS[targetCol], numValue);
+                                    changesMade = true;
+                                }
+                            });
+                        });
+                        
+                        if (changesMade) {
+                            setHasChanges(true);
+                        }
+                    }
+                }
+            }
+        };
+
+        // Add global paste listener with capture phase
+        document.addEventListener('paste', handleGlobalPaste, true);
+        
         const handleClickOutside = (e: MouseEvent) => {
             if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
                 setActiveCell(null);
             }
         };
-
         document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+        
+        return () => {
+            document.removeEventListener('paste', handleGlobalPaste, true);
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [students, handleScoreChange]);
 
     const handleBatchUpdate = (studentId: string, updates: Record<string, number | null>) => {
         setStudents(prev => prev.map(student => {
@@ -412,8 +424,6 @@ export default function Grades() {
             {/* Excel-like Grid */}
             <div 
                 ref={tableRef}
-                onPaste={handleTablePaste}
-                onCopy={handleTableCopy}
                 className="bg-white border border-slate-200 rounded-xl shadow-lg ring-1 ring-black/5 overflow-hidden flex flex-col h-[calc(100vh-280px)]"
             >
                 {loading ? (
