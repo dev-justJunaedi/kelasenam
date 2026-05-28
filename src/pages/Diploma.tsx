@@ -105,28 +105,23 @@ export default function TKA() {
         }
     }, [students.length, focusCell]);
 
-    // Handle paste from clipboard (Excel-like) - works at table level
-    const handleTablePaste = useCallback((e: React.ClipboardEvent) => {
-        // Only handle paste if we're inside the table and have an active cell
-        if (!activeCell || !tableRef.current?.contains(e.target as Node)) return;
-        
+    // Handle paste from clipboard on individual cell (Excel-like)
+    const handleCellPaste = useCallback((e: React.ClipboardEvent, startRow: number, startCol: number) => {
         e.preventDefault();
+        
         const text = e.clipboardData.getData('text');
         
         if (!text) return;
         
         // Parse pasted data (tab-separated columns, newline-separated rows like Excel)
-        // Excel uses \r\n for newlines, but we handle both \r\n and \n
-        const rows = text.split(/\r\n|\n/).filter(row => row.trim() !== '');
+        const rows = text.split(/\r?\n/).filter(row => row.trim() !== '');
         const data = rows.map(row => row.split('\t'));
         
         if (data.length === 0) return;
         
         let changesMade = false;
-        const startRow = activeCell.row;
-        const startCol = activeCell.col;
         
-        // Apply data to cells
+        // Apply data to cells starting from the focused cell
         data.forEach((rowData, rowOffset) => {
             const targetRow = startRow + rowOffset;
             if (targetRow >= students.length) return;
@@ -149,21 +144,7 @@ export default function TKA() {
         if (changesMade) {
             setHasChanges(true);
         }
-    }, [activeCell, students]);
-
-    // Handle copy to clipboard
-    const handleTableCopy = useCallback((e: React.ClipboardEvent) => {
-        if (!activeCell || !tableRef.current?.contains(e.target as Node)) return;
-        
-        e.preventDefault();
-        const student = students[activeCell.row];
-        const field = TKA_FIELDS[activeCell.col];
-        const score = student.tka?.[field];
-        
-        if (score !== null && score !== undefined) {
-            e.clipboardData.setData('text/plain', String(score));
-        }
-    }, [activeCell, students]);
+    }, [students]);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -308,8 +289,6 @@ export default function TKA() {
 
             <div 
                 ref={tableRef}
-                onPaste={handleTablePaste}
-                onCopy={handleTableCopy}
                 className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden flex flex-col"
             >
                 {loading ? (
@@ -370,6 +349,7 @@ export default function TKA() {
                                                                 }
                                                             }}
                                                             onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
+                                                            onPaste={(e) => handleCellPaste(e, rowIndex, colIndex)}
                                                             onFocus={() => setActiveCell({row: rowIndex, col: colIndex})}
                                                             className={`w-full h-full p-3 text-center bg-transparent focus:bg-indigo-50 focus:ring-2 focus:ring-inset focus:ring-indigo-500 outline-none transition-all font-mono cursor-cell
                                                                 ${score === null ? 'placeholder-slate-200' : 'font-medium text-slate-900'}
