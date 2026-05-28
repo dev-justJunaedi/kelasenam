@@ -86,7 +86,14 @@ export async function fetchSPMBData(): Promise<StudentWithSPMB[]> {
 
     if (spmbError) throw spmbError;
 
-    // 4. Merge data
+    // 4. Fetch TKA scores (dari halaman Nilai TKA)
+    const { data: tkaScores, error: tkaError } = await supabase
+        .from('tka_scores')
+        .select('*');
+
+    if (tkaError) throw tkaError;
+
+    // 5. Merge data
     const result: StudentWithSPMB[] = students.map(student => {
         // Organize rapor scores by semester
         const raporScores: Record<string, Record<string, number | null>> = {};
@@ -124,18 +131,48 @@ export async function fetchSPMBData(): Promise<StudentWithSPMB[]> {
         // Get existing SPMB data
         const spmb = spmbScores?.find(s => s.student_id === student.id) || null;
         
+        // Get TKA data dari tabel tka_scores (input di halaman Nilai TKA)
+        const tka = tkaScores?.find(t => t.student_id === student.id) || null;
+        
+        // Calculate TKA average dari tka_scores jika ada
+        let tkaAverage = tka?.average ?? null;
+        const tkaBI = tka?.bahasa_indonesia ?? null;
+        const tkaMTK = tka?.matematika ?? null;
+        
+        // Hitung ulang tka_average jika belum ada tapi kedua nilai ada
+        if (tkaAverage === null && tkaBI !== null && tkaMTK !== null) {
+            tkaAverage = (tkaBI + tkaMTK) / 2;
+        }
+        
         // Calculate derived values
         const nbp = spmb?.ranking_weight ?? null;
-        const nhtka = spmb?.tka_average ?? null;
+        const nhtka = tkaAverage;
         const na = (raporAverage !== null && nbp !== null && nhtka !== null)
             ? (raporAverage + nbp + nhtka) / 3
             : null;
+
+        // Merge spmb dengan data TKA dari tka_scores
+        const mergedSpmb: SPMBScore | null = spmb ? {
+            ...spmb,
+            tka_bahasa_indonesia: tkaBI,
+            tka_matematika: tkaMTK,
+            tka_average: tkaAverage
+        } : (tka ? {
+            student_id: student.id,
+            ranking_position: null,
+            ranking_weight: null,
+            tka_bahasa_indonesia: tkaBI,
+            tka_matematika: tkaMTK,
+            tka_average: tkaAverage,
+            rapor_average: raporAverage,
+            final_score: na
+        } : null);
 
         return {
             ...student,
             raporScores,
             raporAverage,
-            spmb,
+            spmb: mergedSpmb,
             nbp,
             nhtka,
             na
