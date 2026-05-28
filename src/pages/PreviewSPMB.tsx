@@ -256,7 +256,7 @@ export default function PreviewSPMB() {
                                     <th colSpan={2} className="font-bold p-3 border-b border-r border-slate-200 text-center bg-amber-50 text-amber-800">
                                         Peringkat (NBP)
                                     </th>
-                                    <th colSpan={3} className="font-bold p-3 border-b border-r border-slate-200 text-center bg-emerald-50 text-emerald-800">
+                                    <th colSpan={2} className="font-bold p-3 border-b border-r border-slate-200 text-center bg-emerald-50 text-emerald-800">
                                         TKA (NHTKA)
                                     </th>
                                     <th rowSpan={2} className="font-bold p-4 border-b border-slate-200 text-center min-w-[100px] bg-slate-100 z-30 sticky right-0">
@@ -288,9 +288,6 @@ export default function PreviewSPMB() {
                                     </th>
                                     <th className="font-semibold p-2 border-b border-r border-slate-200 text-center text-xs min-w-[80px]">
                                         MTK
-                                    </th>
-                                    <th className="font-semibold p-2 border-b border-r border-slate-200 text-center text-xs bg-emerald-100 text-emerald-700 min-w-[70px]">
-                                        Rata2
                                     </th>
                                 </tr>
                             </thead>
@@ -381,15 +378,6 @@ export default function PreviewSPMB() {
                                                 )}
                                             </td>
                                             
-                                            {/* NHTKA */}
-                                            <td className="p-2 border-r border-slate-200 text-center font-bold bg-emerald-50/50">
-                                                {student.nhtka !== null ? (
-                                                    <span className="text-emerald-700">{student.nhtka.toFixed(2)}</span>
-                                                ) : (
-                                                    <span className="text-slate-300">-</span>
-                                                )}
-                                            </td>
-                                            
                                             {/* NA */}
                                             <td className="p-3 text-center font-bold bg-slate-50 sticky right-0 z-10 border-l border-slate-200">
                                                 {student.na !== null ? (
@@ -406,7 +394,7 @@ export default function PreviewSPMB() {
                                 
                                 {students.length === 0 && (
                                     <tr>
-                                        <td colSpan={14} className="p-8 text-center text-slate-500">
+                                        <td colSpan={13} className="p-8 text-center text-slate-500">
                                             Tidak ada data siswa ditemukan.
                                         </td>
                                     </tr>
