@@ -105,57 +105,184 @@ export default function TKA() {
         }
     }, [students.length, focusCell]);
 
-    // Handle paste from clipboard on individual cell (Excel-like)
+    // Handle paste from clipboard (Excel-like)
     const handleCellPaste = useCallback((e: React.ClipboardEvent, startRow: number, startCol: number) => {
+        console.log('[PASTE] Event triggered at cell:', startRow, startCol);
         e.preventDefault();
+        e.stopPropagation();
         
         const text = e.clipboardData.getData('text');
+        console.log('[PASTE] Clipboard text:', JSON.stringify(text));
         
-        if (!text) return;
+        if (!text) {
+            console.log('[PASTE] No text in clipboard');
+            return;
+        }
         
-        // Parse pasted data (tab-separated columns, newline-separated rows like Excel)
-        const rows = text.split(/\r?\n/).filter(row => row.trim() !== '');
-        const data = rows.map(row => row.split('\t'));
+        // Parse pasted data - handle various Excel formats
+        // Excel uses tab-separated columns and CRLF or LF for rows
+        const rawRows = text.split(/\r\n|\n|\r/);
+        console.log('[PASTE] Raw rows:', rawRows);
         
-        if (data.length === 0) return;
+        // Filter out empty rows but keep rows with meaningful content
+        const rows = rawRows.filter(row => row.trim() !== '');
+        console.log('[PASTE] Filtered rows:', rows);
+        
+        // Try tab first, then space, then comma
+        let data = rows.map(row => row.split('\t'));
+        
+        // If no tabs found, try other delimiters
+        if (data.length > 0 && data[0].length === 1) {
+            // Try splitting by multiple spaces
+            data = rows.map(row => row.split(/\s{2,}/));
+        }
+        
+        console.log('[PASTE] Parsed data:', data);
+        console.log('[PASTE] Total rows:', data.length, 'Cols in first row:', data[0]?.length);
+        
+        if (data.length === 0) {
+            console.log('[PASTE] No data to paste');
+            return;
+        }
         
         let changesMade = false;
+        let pastedCount = 0;
         
         // Apply data to cells starting from the focused cell
         data.forEach((rowData, rowOffset) => {
             const targetRow = startRow + rowOffset;
-            if (targetRow >= students.length) return;
+            if (targetRow >= students.length) {
+                console.log('[PASTE] Skip row', targetRow, '- beyond student count');
+                return;
+            }
             
             rowData.forEach((value, colOffset) => {
                 const targetCol = startCol + colOffset;
-                if (targetCol >= TKA_FIELDS.length) return;
+                if (targetCol >= TKA_FIELDS.length) {
+                    console.log('[PASTE] Skip col', targetCol, '- beyond field count');
+                    return;
+                }
                 
                 const trimmedValue = value.trim();
-                if (trimmedValue === '') return;
+                if (trimmedValue === '') {
+                    console.log('[PASTE] Skip empty value');
+                    return;
+                }
                 
-                const numValue = Number(trimmedValue);
+                // Handle various number formats (e.g., "85,5" -> 85.5)
+                const normalizedValue = trimmedValue.replace(',', '.');
+                const numValue = Number(normalizedValue);
+                
+                console.log('[PASTE] Processing value:', trimmedValue, '-> num:', numValue);
+                
                 if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+                    console.log('[PASTE] Setting value for student', targetRow, 'field', TKA_FIELDS[targetCol], '=', numValue);
                     handleScoreChange(students[targetRow].id, TKA_FIELDS[targetCol], numValue);
                     changesMade = true;
+                    pastedCount++;
+                } else {
+                    console.log('[PASTE] Invalid number:', numValue);
                 }
             });
         });
+        
+        console.log('[PASTE] Total pasted:', pastedCount, 'changes made:', changesMade);
         
         if (changesMade) {
             setHasChanges(true);
         }
     }, [students]);
 
+    // Global paste handler for more reliable Excel paste
     useEffect(() => {
+        const handleGlobalPaste = (e: ClipboardEvent) => {
+            const target = e.target as HTMLElement;
+            
+            // Check if we're inside our table
+            if (!tableRef.current?.contains(target)) return;
+            
+            // Find which input is focused
+            if (target.tagName === 'INPUT' && target.closest('td')) {
+                console.log('[GLOBAL PASTE] Detected paste in table input');
+                
+                // Try to find the cell position from the DOM
+                const td = target.closest('td');
+                const tr = target.closest('tr');
+                
+                if (td && tr) {
+                    const rowIndex = Array.from(tr.parentElement?.children || []).indexOf(tr);
+                    const colIndex = Array.from(tr.children).indexOf(td) - 1; // -1 for name column
+                    
+                    console.log('[GLOBAL PASTE] Found position:', rowIndex, colIndex);
+                    
+                    if (rowIndex >= 0 && colIndex >= 0 && colIndex < TKA_FIELDS.length) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const text = e.clipboardData?.getData('text') || '';
+                        console.log('[GLOBAL PASTE] Text:', JSON.stringify(text));
+                        
+                        if (!text) return;
+                        
+                        // Parse data
+                        const rawRows = text.split(/\r\n|\n|\r/);
+                        const rows = rawRows.filter(row => row.trim() !== '');
+                        
+                        // Try different delimiters
+                        let data = rows.map(row => row.split('\t'));
+                        if (data.length > 0 && data[0].length === 1) {
+                            data = rows.map(row => row.split(/\s{2,}/));
+                        }
+                        
+                        console.log('[GLOBAL PASTE] Parsed:', data);
+                        
+                        let changesMade = false;
+                        
+                        data.forEach((rowData, rowOffset) => {
+                            const targetRow = rowIndex + rowOffset;
+                            if (targetRow >= students.length) return;
+                            
+                            rowData.forEach((value, colOffset) => {
+                                const targetCol = colIndex + colOffset;
+                                if (targetCol >= TKA_FIELDS.length) return;
+                                
+                                const trimmedValue = value.trim();
+                                if (trimmedValue === '') return;
+                                
+                                const normalizedValue = trimmedValue.replace(',', '.');
+                                const numValue = Number(normalizedValue);
+                                
+                                if (!isNaN(numValue) && numValue >= 0 && numValue <= 100) {
+                                    console.log('[GLOBAL PASTE] Setting:', targetRow, TKA_FIELDS[targetCol], numValue);
+                                    handleScoreChange(students[targetRow].id, TKA_FIELDS[targetCol], numValue);
+                                    changesMade = true;
+                                }
+                            });
+                        });
+                        
+                        if (changesMade) {
+                            setHasChanges(true);
+                        }
+                    }
+                }
+            }
+        };
+
+        // Add global paste listener
+        document.addEventListener('paste', handleGlobalPaste, true); // capture phase
+        
         const handleClickOutside = (e: MouseEvent) => {
             if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
                 setActiveCell(null);
             }
         };
-
         document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+        
+        return () => {
+            document.removeEventListener('paste', handleGlobalPaste, true);
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [students]);
 
     const handleScoreChange = (studentId: string, field: 'bahasa_indonesia' | 'matematika', value: string | number | null) => {
         const numValue = value === '' ? null : Number(value);
