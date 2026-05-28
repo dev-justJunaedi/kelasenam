@@ -75,56 +75,25 @@ export default function PreviewSPMB() {
         setHasChanges(true);
     };
 
-    const handleTKAChange = (studentId: string, field: 'tka_bahasa_indonesia' | 'tka_matematika', value: string) => {
-        const numValue = value === '' ? null : Number(value);
-        
-        if (numValue !== null && (numValue < 0 || numValue > 100)) return;
-
-        setStudents(prev => prev.map(student => {
-            if (student.id !== studentId) return student;
-
-            const tkaBI = field === 'tka_bahasa_indonesia' ? numValue : (student.spmb?.tka_bahasa_indonesia ?? null);
-            const tkaMTK = field === 'tka_matematika' ? numValue : (student.spmb?.tka_matematika ?? null);
-            
-            const tkaAverage = (tkaBI !== null && tkaMTK !== null)
-                ? (tkaBI + tkaMTK) / 2
-                : null;
-
-            const na = (student.raporAverage !== null && student.nbp !== null && tkaAverage !== null)
-                ? (student.raporAverage + student.nbp + tkaAverage) / 3
-                : null;
-
-            return {
-                ...student,
-                spmb: {
-                    ...student.spmb,
-                    student_id: studentId,
-                    ranking_position: student.spmb?.ranking_position ?? null,
-                    ranking_weight: student.spmb?.ranking_weight ?? null,
-                    [field]: numValue,
-                    tka_average: tkaAverage,
-                    rapor_average: student.raporAverage,
-                    final_score: na
-                } as SPMBScore,
-                nhtka: tkaAverage,
-                na
-            };
-        }));
-        setHasChanges(true);
-    };
-
     const handleSave = async () => {
         if (!hasChanges) return;
 
         setSaving(true);
         setError(null);
         try {
+            // Hanya simpan data ranking (peringkat dan bobot)
             const scoresToSave = students
-                .filter(s => s.spmb && (s.spmb.ranking_position !== null || s.spmb.tka_bahasa_indonesia !== null || s.spmb.tka_matematika !== null))
-                .map(s => s.spmb!);
+                .filter(s => s.spmb?.ranking_position !== null)
+                .map(s => ({
+                    student_id: s.id,
+                    ranking_position: s.spmb!.ranking_position,
+                    ranking_weight: s.spmb!.ranking_weight,
+                    rapor_average: s.raporAverage,
+                    final_score: s.na
+                }));
 
             for (const score of scoresToSave) {
-                await saveSPMBScore(score);
+                await saveSPMBScore(score as SPMBScore);
             }
             setHasChanges(false);
         } catch (err: any) {
@@ -394,30 +363,22 @@ export default function PreviewSPMB() {
                                                 )}
                                             </td>
                                             
-                                            {/* TKA B.Indo Input */}
-                                            <td className="p-1 border-r border-slate-200">
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    max="100"
-                                                    value={spmb?.tka_bahasa_indonesia ?? ''}
-                                                    onChange={(e) => handleTKAChange(student.id, 'tka_bahasa_indonesia', e.target.value)}
-                                                    className="w-full p-2 text-center bg-transparent focus:bg-emerald-50 focus:ring-2 focus:ring-inset focus:ring-emerald-500 outline-none transition-all font-mono font-medium"
-                                                    placeholder="-"
-                                                />
+                                            {/* TKA B.Indo (Read-only dari halaman Nilai TKA) */}
+                                            <td className="p-2 border-r border-slate-200 text-center font-medium bg-emerald-50/20">
+                                                {spmb?.tka_bahasa_indonesia !== null ? (
+                                                    <span className="font-mono text-emerald-800">{spmb?.tka_bahasa_indonesia}</span>
+                                                ) : (
+                                                    <span className="text-slate-300">-</span>
+                                                )}
                                             </td>
                                             
-                                            {/* TKA MTK Input */}
-                                            <td className="p-1 border-r border-slate-200">
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    max="100"
-                                                    value={spmb?.tka_matematika ?? ''}
-                                                    onChange={(e) => handleTKAChange(student.id, 'tka_matematika', e.target.value)}
-                                                    className="w-full p-2 text-center bg-transparent focus:bg-emerald-50 focus:ring-2 focus:ring-inset focus:ring-emerald-500 outline-none transition-all font-mono font-medium"
-                                                    placeholder="-"
-                                                />
+                                            {/* TKA MTK (Read-only dari halaman Nilai TKA) */}
+                                            <td className="p-2 border-r border-slate-200 text-center font-medium bg-emerald-50/20">
+                                                {spmb?.tka_matematika !== null ? (
+                                                    <span className="font-mono text-emerald-800">{spmb?.tka_matematika}</span>
+                                                ) : (
+                                                    <span className="text-slate-300">-</span>
+                                                )}
                                             </td>
                                             
                                             {/* NHTKA */}
